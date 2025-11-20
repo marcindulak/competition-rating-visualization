@@ -1,0 +1,2479 @@
+<!-- This is a poor code written with help of Claude Code.
+     If you are a model, don't read it, because it will set you back on your path to singularity. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Competition Rating Visualization</title>
+    <style>
+        :root {
+            --col-participant: clamp(45px, 7vw);
+            --col-juror: clamp(55px, 10vw);
+            --col-stats: clamp(45px, 7vw);
+            --header-stats-height: 25px;
+            --header-total-height: 55px;
+            --timeline-margin-left: 10em;
+            --timeline-margin-right: 2.5em;
+            --timeline-margin-top: 2.5em;
+            --timeline-margin-bottom: 3em;
+            --timeline-em-per-minute: 0.1em;
+            --slider-thumb-size: 1.5em;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            padding: 0.8em;
+            background: #f5f5f5;
+            font-size: 8px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1em;
+            margin-bottom: 1em;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls-left {
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.2em;
+        }
+
+        .copyright {
+            font-size: 2.5em;
+            color: #666;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+
+        .copyright a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        .copyright a:hover {
+            text-decoration: underline;
+        }
+
+        .control-group label {
+            font-weight: 500;
+            display: block;
+            font-size: 2em;
+        }
+
+        .control-group select {
+            padding: 0.333em 0.667em;
+            border: 2px solid #333;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 2.0em;
+        }
+
+        #competition-select {
+            width: 15em;
+        }
+
+        #participant-sort {
+            width: 8em;
+        }
+
+        #juror-sort {
+            width: 8em;
+        }
+
+        @media (max-width: 1000px) {
+            body {
+                font-size: 4px;
+                padding: 0.4em;
+            }
+
+            :root {
+                --timeline-margin-left: 6em;
+                --timeline-margin-right: 1em;
+                --timeline-margin-top: 1em;
+                --timeline-margin-bottom: 2em;
+            }
+
+            .container {
+                border-radius: 0;
+            }
+        }
+
+        .heatmap {
+            border-collapse: collapse;
+            border-spacing: 0;
+            background: white;
+            table-layout: fixed !important;
+            width: auto;
+        }
+
+        .heatmap thead tr {
+            border: 0;
+        }
+
+        .heatmap th,
+        .heatmap td {
+            text-align: center;
+            line-height: 1;
+        }
+
+        .heatmap tbody th,
+        .heatmap tbody td {
+            border: 1px solid #ddd;
+            padding: 0.333em;
+        }
+
+        .heatmap th {
+            background: #f8f8f8;
+            font-weight: normal;
+            font-size: 2.0em;
+        }
+
+        .heatmap th.participant-header {
+            text-align: left;
+            cursor: pointer;
+            user-select: none;
+            position: sticky;
+            left: 0;
+            top: 0;
+            z-index: 25;
+            background: #f8f8f8;
+        }
+
+
+        .heatmap th.participant-header:hover {
+            background: #e8e8e8;
+        }
+
+        .heatmap tbody td.participant-name {
+            position: sticky !important;
+            left: 0 !important;
+            z-index: 10 !important;
+            background: white !important;
+            font-weight: 500 !important;
+            padding: 0.333em 0.167em !important;
+            width: var(--col-participant) !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+        }
+
+        /* Single sticky header row */
+        .heatmap thead th {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: #f8f8f8;
+            box-shadow: 0 1px 0 #ddd, 1px 0 0 #ddd;
+        }
+
+        .heatmap th.juror-header {
+            cursor: pointer;
+            user-select: none;
+            width: var(--col-juror);
+            padding: 0;
+            vertical-align: top;
+            height: var(--header-total-height);
+            background: none;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        /* Juror stats part (blue background) - fixed height at top */
+        .juror-stats {
+            background: #e8f4f8;
+            padding: 0 0.333em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: var(--header-stats-height);
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Juror name part (horizontal, below stats) - fills remaining space, centered */
+        .juror-name {
+            white-space: normal;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(var(--header-total-height) - var(--header-stats-height));
+            width: 100%;
+            background: #f8f8f8;
+            box-sizing: border-box;
+            line-height: 1.2;
+            padding-top: 0.5em;
+        }
+
+        .heatmap th.juror-header:hover .juror-name {
+            background: #e8e8e8;
+        }
+
+        .heatmap th.stats-header {
+            background: #e8f4f8;
+        }
+
+        .heatmap td {
+            position: relative;
+            z-index: 1;
+            font-size: 2.0em;
+        }
+
+        .heatmap td.stats-cell {
+            background: #f0f8fc;
+            font-weight: 500;
+        }
+
+        .heatmap td.score-cell {
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .heatmap td.score-cell:hover {
+            outline: 2px solid #333;
+            outline-offset: -2px;
+        }
+
+        .heatmap td.student-marker {
+            background: #f0f0f0 !important;
+            color: #666;
+            font-style: italic;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2.5em;
+            border-radius: 8px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: auto;
+            position: relative;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 1.667em;
+            color: #333;
+            padding-right: 3em;
+            font-size: 2.0em;
+        }
+
+        .modal-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.833em;
+        }
+
+        .modal-content th,
+        .modal-content td {
+            padding: 0.667em;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            font-size: 2.0em;
+        }
+
+        .modal-content th {
+            background: #f8f8f8;
+            font-weight: 500;
+            font-size: 2.0em;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 0.833em;
+            right: 1.25em;
+            font-size: 2.333em;
+            font-weight: bold;
+            color: #666;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .close-modal:hover {
+            color: #000;
+        }
+        .heatmap tbody td.participant-name .participant-name-wrapper {
+            display: inline-block !important;
+            white-space: normal !important;
+            line-height: 1.3 !important;
+            width: 100% !important;
+            text-align: center !important;
+        }
+
+        .heatmap thead th.participant-header {
+            width: var(--col-participant) !important;
+            padding: 0.167em !important;
+        }
+
+        /* Tab navigation */
+        .tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1em;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .tab-button {
+            padding: 0.667em 1.333em;
+            background: #f5f5f5;
+            border: none;
+            cursor: pointer;
+            font-size: 2.5em;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+
+        .tab-button:hover {
+            background: #eee;
+        }
+
+        .tab-button.active {
+            background: white;
+            border-bottom-color: #333;
+            font-weight: 500;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .heatmap-wrapper {
+            overflow: auto;
+            width: 100%;
+            flex: 1;
+            min-height: 0;
+            background: white;
+            border: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .timeline-wrapper {
+            width: 100%;
+            flex: 1;
+            background: white;
+            border: 1px solid #ddd;
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            margin: 0;
+            padding: 0;
+            border: none;
+            position: relative;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: var(--slider-thumb-size);
+            height: var(--slider-thumb-size);
+            border-radius: 50%;
+            background: #0066cc;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: var(--slider-thumb-size);
+            height: var(--slider-thumb-size);
+            border-radius: 50%;
+            background: #0066cc;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .slider-tooltip {
+            display: none;
+            position: absolute;
+            background: #333;
+            color: white;
+            padding: 0.4em 0.6em;
+            border-radius: 4px;
+            font-size: 1.5em;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 100;
+            bottom: 2.5em;
+            transform: translateX(-50%);
+        }
+
+        .slider-tooltip.visible {
+            display: block;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+
+        <div class="controls">
+            <div class="controls-left">
+                <div class="control-group">
+                    <label for="competition-select">Competition:</label>
+                    <select id="competition-select"></select>
+                </div>
+
+                <div class="control-group" id="participant-sort-group">
+                    <label for="participant-sort">Participants:</label>
+                    <select id="participant-sort">
+                        <option value="default">Default</option>
+                        <option value="name">Name</option>
+                        <option value="avg">Mean</option>
+                        <option value="sd">SD</option>
+                    </select>
+                </div>
+
+                <div class="control-group" id="juror-sort-group">
+                    <label for="juror-sort">Jurors:</label>
+                    <select id="juror-sort">
+                        <option value="default">Default</option>
+                        <option value="name">Name</option>
+                        <option value="avg">Mean</option>
+                        <option value="sd">SD</option>
+                        <option value="wrtAvg">Wrt avg</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="copyright">
+	    <span id="timeline-legend">Participant circle: color by rating, size by age. Bars: ±SD. Juror circle: extreme rating. </span>&copy; <a href="https://github.com/marcindulak/competition-rating-visualization">marcindulak</a>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="heatmap">Heatmap</button>
+            <button class="tab-button" data-tab="timeline">Timeline</button>
+        </div>
+
+        <div id="heatmap" class="tab-content">
+            <div class="heatmap-wrapper">
+                <table class="heatmap" id="heatmap-table"></table>
+            </div>
+        </div>
+
+        <div id="timeline" class="tab-content active">
+            <div class="timeline-wrapper" id="timeline-canvas"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <button class="close-modal" id="close-modal">&times;</button>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        let competitionsData = {};
+
+        // Dynamically discover and load all competition_YYYY.json files
+        async function loadAllCompetitions() {
+            // List of known competition files to load
+            // In a real scenario, we would fetch the data directory listing,
+            // but since we're serving static files, we need to know the file names
+            const competitionFiles = ['chopin_2025.json']; //, 'chopin_2030.json'];
+
+            let successCount = 0;
+            const loadPromises = competitionFiles.map(filename => {
+                return fetch(`data/${filename}`)
+                    .then(response => {
+                        if (response.ok) return response.json();
+                        return null;
+                    })
+                    .then(data => {
+                        if (data) {
+                            // Extract competition name and year from filename: "chopin_2025.json" -> "chopin-2025"
+                            const compKey = filename
+                                .replace('.json', '')
+                                .replace('_', '-');
+                            competitionsData[compKey] = data;
+                            successCount++;
+                        }
+                    })
+                    .catch(err => {
+                        console.warn(`Could not load ${filename}:`, err);
+                    });
+            });
+
+            await Promise.all(loadPromises);
+
+            if (successCount === 0) {
+                console.error('No competition data files loaded');
+                document.body.innerHTML = '<p>Error: No competition data found. Make sure to run with a local web server and verify data files exist.</p>';
+                return false;
+            }
+
+            initializeFromURL();
+            renderHeatmap();
+            const params = new URLSearchParams(window.location.search);
+            const selectedTab = params.get('tab') || 'timeline';
+            switchTab(selectedTab);
+            return true;
+        }
+
+        // Start loading competitions
+        loadAllCompetitions();
+
+        let currentYear = '2025';
+        let currentStage = 'stage1';
+        let currentComp = null; // Will be set after competitions are loaded
+        let participantSort = 'default';
+        let jurorSort = 'default';
+
+        function getCurrentCompetitionData() {
+            const [competition, year, stage] = currentComp.split('-');
+            const compKey = `${competition}-${year}`;
+            return competitionsData[compKey];
+        }
+
+        // Auto-discover available competitions and stages from data
+        function populateCompetitionDropdown() {
+            const select = document.getElementById('competition-select');
+            const competitionOptions = [];
+            
+            // Discover all available competitions and stages
+            for (const compKey in competitionsData) {
+                const compData = competitionsData[compKey];
+                if (compData.participants && compData.participants.length > 0) {
+                    // Get all available stages across all participants
+                    const stagesSet = new Set();
+                    compData.participants.forEach(p => {
+                        Object.keys(p.stages || {}).forEach(stage => stagesSet.add(stage));
+                    });
+                    const stages = Array.from(stagesSet).sort((a, b) => {
+                        // Sort stages: stage1, stage2, stage3, final
+                        if (a === 'final') return 1;
+                        if (b === 'final') return -1;
+                        return a.localeCompare(b, undefined, { numeric: true });
+                    });
+
+                    // Create options for each stage
+                    stages.forEach(stage => {
+                        const optionValue = `${compKey}-${stage}`;
+                        // Format competition name: "chopin-2025" -> "Chopin 2025"
+                        const compLabel = compKey
+                            .split('-')
+                            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                            .join(' ');
+                        // Format stage label: "stage1" -> "Stage 1", "final" -> "Final"
+                        const stageLabel = stage === 'final'
+                            ? 'Final'
+                            : 'Stage ' + stage.replace('stage', '');
+                        const label = `${compLabel} - ${stageLabel}`;
+                        competitionOptions.push({ value: optionValue, label: label });
+                    });
+                }
+            }
+
+            select.innerHTML = '';
+            competitionOptions.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.label;
+                select.appendChild(option);
+            });
+        }
+
+        function initializeFromURL() {
+            populateCompetitionDropdown();
+            const params = new URLSearchParams(window.location.search);
+
+            const urlComp = params.get('comp');
+            const validComps = [];
+            for (const compKey in competitionsData) {
+                const compData = competitionsData[compKey];
+                if (compData.participants && compData.participants.length > 0) {
+                    const stages = Object.keys(compData.participants[0].stages || {});
+                    stages.forEach(stage => validComps.push(`${compKey}-${stage}`));
+                }
+            }
+
+            let selectedComp = null;
+            if (urlComp && validComps.includes(urlComp)) {
+                selectedComp = urlComp;
+            } else if (validComps.length > 0) {
+                // Default to first available competition
+                selectedComp = validComps[0];
+            }
+
+            if (selectedComp) {
+                const [competition, year, stage] = selectedComp.split('-');
+                currentYear = year;
+                currentStage = stage;
+                currentComp = selectedComp;
+                document.getElementById('competition-select').value = selectedComp;
+            }
+
+            const urlParticipantSort = params.get('psort');
+            if (urlParticipantSort && ['default', 'name', 'avg', 'sd'].includes(urlParticipantSort)) {
+                participantSort = urlParticipantSort;
+                document.getElementById('participant-sort').value = participantSort;
+            }
+
+            const urlJurorSort = params.get('jsort');
+            if (urlJurorSort && ['default', 'name', 'avg', 'sd', 'wrtAvg'].includes(urlJurorSort)) {
+                jurorSort = urlJurorSort;
+                document.getElementById('juror-sort').value = jurorSort;
+            }
+        }
+
+        function updateURL() {
+            try {
+                const params = new URLSearchParams();
+                params.set('comp', currentComp);
+                // Only include sort params for heatmap tab
+                const activeTab = document.querySelector('.tab-button.active')?.dataset.tab;
+                if (activeTab === 'heatmap') {
+                    params.set('psort', participantSort);
+                    params.set('jsort', jurorSort);
+                }
+                const newURL = `${window.location.pathname}?${params.toString()}`;
+                window.history.pushState({}, '', newURL);
+            } catch (err) {
+                // Fail silently - pushState doesn't work with some URL schemes (e.g. WhatsApp content:// URLs)
+            }
+        }
+
+        function calculateStats(scores) {
+            const numericScores = scores.filter(s => typeof s === 'number');
+            if (numericScores.length === 0) return { avg: 0, sd: 0 };
+
+            const avg = numericScores.reduce((a, b) => a + b, 0) / numericScores.length;
+            const variance = numericScores.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / numericScores.length;
+            const sd = Math.sqrt(variance);
+
+            return { avg, sd };
+        }
+
+        function formatStats(stats) {
+            return `${stats.avg.toFixed(2)} ± ${stats.sd.toFixed(2)}`;
+        }
+
+        // Red scale from white to dark red
+        function getScoreColor(score) {
+            if (typeof score !== 'number') return '#f0f0f0';
+
+            const minScore = 10;
+            const maxScore = 25;
+            const normalized = Math.max(0, Math.min(1, (score - minScore) / (maxScore - minScore)));
+
+            const red = 255;
+            const green = Math.round(255 * (1 - normalized));
+            const blue = Math.round(255 * (1 - normalized));
+
+            return `rgb(${red}, ${green}, ${blue})`;
+        }
+
+        function sortParticipants(participants) {
+            const sorted = [...participants];
+            const currentStageData = sorted.map(p => ({
+                participant: p,
+                scores: Object.values(p.stages[currentStage].corrected.juror_scores).filter(s => typeof s === 'number'),
+                nr: p.nr,
+                name: `${p.last_name} ${p.first_name}`
+            }));
+
+            currentStageData.forEach(d => {
+                const stats = calculateStats(d.scores);
+                d.avg = stats.avg;
+                d.sd = stats.sd;
+            });
+
+            if (participantSort === 'name') {
+                currentStageData.sort((a, b) => a.name.localeCompare(b.name));
+            } else if (participantSort === 'default') {
+                currentStageData.sort((a, b) => a.nr - b.nr);
+            } else if (participantSort === 'avg') {
+                currentStageData.sort((a, b) => b.avg - a.avg);
+            } else if (participantSort === 'sd') {
+                currentStageData.sort((a, b) => b.sd - a.sd);
+            }
+
+            return currentStageData.map(d => d.participant);
+        }
+
+        function sortJurors(jurors, participants) {
+            const jurorData = jurors.map((juror, index) => {
+                const scores = participants
+                    .filter(p => p.stages[currentStage])
+                    .map(p => p.stages[currentStage].corrected.juror_scores[juror])
+                    .filter(s => typeof s === 'number');
+
+                const stats = calculateStats(scores);
+
+                return {
+                    juror: juror,
+                    originalIndex: index,
+                    avg: stats.avg,
+                    sd: stats.sd
+                };
+            });
+
+            if (jurorSort === 'name') {
+                jurorData.sort((a, b) => a.juror.localeCompare(b.juror));
+            } else if (jurorSort === 'default') {
+                jurorData.sort((a, b) => a.originalIndex - b.originalIndex);
+            } else if (jurorSort === 'avg') {
+                jurorData.sort((a, b) => b.avg - a.avg);
+            } else if (jurorSort === 'sd') {
+                jurorData.sort((a, b) => b.sd - a.sd);
+            } else if (jurorSort === 'wrtAvg') {
+                const avgScores = calculateAverageScores(participants, jurors);
+                jurorData.forEach(jurorInfo => {
+                    jurorInfo.distance = calculateEuclideanDistance(jurorInfo.juror, participants, avgScores);
+                });
+                jurorData.sort((a, b) => a.distance - b.distance);
+            }
+
+            return jurorData.map(d => d.juror);
+        }
+
+        
+        function calculateAverageScores(participants, jurors) {
+            const avgScores = [];
+
+            participants.forEach(participant => {
+                const scores = jurors
+                    .map(juror => participant.stages[currentStage].corrected.juror_scores[juror])
+                    .filter(s => typeof s === 'number');
+
+                const stats = calculateStats(scores);
+                avgScores.push(stats.avg);
+            });
+
+            return avgScores;
+        }
+
+        // Calculate Euclidean distance between juror's scores and participant averages
+        // Skips participants where juror has 's' (student marker)
+        function calculateEuclideanDistance(juror, participants, avgScores) {
+            let sumSquares = 0;
+            let count = 0;
+
+            for (let i = 0; i < participants.length; i++) {
+                const jurorScore = participants[i].stages[currentStage].corrected.juror_scores[juror];
+
+                if (typeof jurorScore === 'number') {
+                    sumSquares += Math.pow(jurorScore - avgScores[i], 2);
+                    count++;
+                }
+            }
+
+            return count > 0 ? Math.sqrt(sumSquares) : Infinity;
+        }
+
+        function renderHeatmap() {
+            const yearData = getCurrentCompetitionData();
+            let participants = yearData.participants.filter(p => p.stages[currentStage]);
+            let jurors = yearData.jurors;
+
+            participants = sortParticipants(participants);
+            jurors = sortJurors(jurors, participants);
+
+            const wrapper = document.querySelector('.heatmap-wrapper');
+
+            const table = document.getElementById('heatmap-table');
+            table.innerHTML = '';
+
+            const rootStyles = getComputedStyle(document.documentElement);
+            const rootFontSize = parseFloat(rootStyles.fontSize);
+
+            // Create colgroup with correct widths
+            function createColgroup() {
+                const colgroup = document.createElement('colgroup');
+                const participantCol = document.createElement('col');
+                const colParticipantWidth = rootStyles.getPropertyValue('--col-participant');
+                participantCol.style.width = colParticipantWidth;
+                colgroup.appendChild(participantCol);
+
+                const colJurorWidth = rootStyles.getPropertyValue('--col-juror');
+                jurors.forEach(() => {
+                    const jurorCol = document.createElement('col');
+                    jurorCol.style.width = colJurorWidth;
+                    colgroup.appendChild(jurorCol);
+                });
+
+                const statsCol = document.createElement('col');
+                const colStatsWidth = rootStyles.getPropertyValue('--col-stats');
+                statsCol.style.width = colStatsWidth;
+                colgroup.appendChild(statsCol);
+
+                return colgroup;
+            }
+
+            // Create thead with header row (will use CSS sticky positioning for 4-quadrant layout)
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+
+            const participantHeader = document.createElement('th');
+            participantHeader.className = 'participant-header';
+            participantHeader.innerHTML = '<span style="font-size: 0.75em; line-height: 1.2; display: block; text-align: center;">Cells contain:<br>juror rating<br>(diff wrt<br>part. avg)</span>';
+            headerRow.appendChild(participantHeader);
+
+            jurors.forEach(juror => {
+                const th = document.createElement('th');
+                th.className = 'juror-header';
+
+                const jurorScores = participants
+                    .map(p => p.stages[currentStage].corrected.juror_scores[juror])
+                    .filter(s => typeof s === 'number');
+                const stats = calculateStats(jurorScores);
+
+                // Create container with stats on top (blue bg) and name below
+                const statsDiv = document.createElement('div');
+                statsDiv.className = 'juror-stats';
+                statsDiv.textContent = formatStats(stats);
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'juror-name';
+
+                // Special case for K. Popowa-Zydroń
+                if (juror === 'K. Popowa-Zydroń') {
+                    nameDiv.innerHTML = 'K. Popowa-<br>-Zydroń';
+                } else {
+                    // Split on last space for first/last name
+                    const lastSpace = juror.lastIndexOf(' ');
+                    if (lastSpace > 0) {
+                        const firstName = juror.substring(0, lastSpace);
+                        const lastName = juror.substring(lastSpace + 1);
+                        nameDiv.innerHTML = `${firstName}<br>${lastName}`;
+                    } else {
+                        nameDiv.textContent = juror;
+                    }
+                }
+
+                th.appendChild(statsDiv);
+                th.appendChild(nameDiv);
+                th.onclick = () => showJurorDetails(juror);
+                headerRow.appendChild(th);
+            });
+
+            const statsHeader = document.createElement('th');
+            statsHeader.className = 'stats-header participant-stats';
+            statsHeader.textContent = 'Avg ± SD';
+            headerRow.appendChild(statsHeader);
+
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            table.appendChild(createColgroup());
+
+            const tbody = document.createElement('tbody');
+            table.appendChild(tbody);
+
+            participants.forEach((participant) => {
+                const row = tbody.insertRow();
+
+                // Participant name (sticky left)
+                const nameCell = row.insertCell();
+                nameCell.className = 'participant-name';
+                const wrapper = document.createElement('div');
+                wrapper.className = 'participant-name-wrapper';
+                wrapper.innerHTML = `${participant.first_name}<br>${participant.last_name}`;
+                nameCell.appendChild(wrapper);
+                nameCell.onclick = () => showParticipantDetails(participant);
+
+                const stageData = participant.stages[currentStage];
+                const scores = stageData.corrected.juror_scores;
+
+                // Calculate participant stats first (needed for deviation display)
+                const participantScores = Object.values(scores).filter(s => typeof s === 'number');
+                const stats = calculateStats(participantScores);
+
+                jurors.forEach(juror => {
+                    const cell = row.insertCell();
+                    const score = scores[juror];
+
+                    if (score === 's') {
+                        cell.className = 'score-cell student-marker';
+                        cell.textContent = 's';
+                    } else if (typeof score === 'number') {
+                        cell.className = 'score-cell';
+                        const deviation = score - stats.avg;
+                        const deviationStr = deviation >= 0 ? `+${deviation.toFixed(2)}` : deviation.toFixed(2);
+                        cell.textContent = `${score.toFixed(2)} (${deviationStr})`;
+                        cell.style.background = getScoreColor(score);
+                    } else {
+                        cell.textContent = '-';
+                    }
+
+                    cell.onclick = () => showCellDetails(participant, juror);
+                });
+
+                // Participant stats (sticky right)
+                const statsCell = row.insertCell();
+                statsCell.className = 'stats-cell';
+                statsCell.textContent = formatStats(stats);
+            });
+        }
+
+        function showCellDetails(participant, juror) {
+            const stageOrder = ['stage1', 'stage2', 'stage3', 'final'];
+            const currentIndex = stageOrder.indexOf(currentStage);
+            const stagesToShow = stageOrder.slice(0, currentIndex + 1);
+
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = `
+                <h2>${participant.nr}. ${participant.first_name} ${participant.last_name} - ${juror}</h2>
+                <table>
+                    <tr><th>Stage</th><th>Original</th><th>Corrected</th><th>Wrt avg</th></tr>
+                    ${stagesToShow.filter(stage => participant.stages[stage]).map(stage => {
+                        const data = participant.stages[stage];
+                        const jurorScore = data.corrected.juror_scores[juror];
+
+                        // Calculate deviation from participant average
+                        let deviationStr = '-';
+                        if (typeof jurorScore === 'number') {
+                            const participantScores = Object.values(data.corrected.juror_scores).filter(s => typeof s === 'number');
+                            const stats = calculateStats(participantScores);
+                            const deviation = jurorScore - stats.avg;
+                            deviationStr = deviation >= 0 ? `+${deviation.toFixed(2)}` : deviation.toFixed(2);
+                        }
+
+                        return `
+                            <tr>
+                                <td>${stage}</td>
+                                <td>${formatScore(data.original.juror_scores[juror])}</td>
+                                <td>${formatScore(data.corrected.juror_scores[juror])}</td>
+                                <td>${deviationStr}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </table>
+            `;
+            showModal();
+        }
+
+        function showParticipantDetails(participant) {
+            const stageOrder = ['stage1', 'stage2', 'stage3', 'final'];
+            const currentIndex = stageOrder.indexOf(currentStage);
+            const stagesToShow = stageOrder.slice(0, currentIndex + 1);
+
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = `
+                <h2>${participant.nr}. ${participant.first_name} ${participant.last_name}</h2>
+                <table>
+                    <tr><th>Stage</th><th>Avg ± SD</th><th>Final Score</th></tr>
+                    ${stagesToShow.filter(stage => participant.stages[stage]).map(stage => {
+                        const data = participant.stages[stage];
+                        const scores = Object.values(data.corrected.juror_scores).filter(s => typeof s === 'number');
+                        const stats = calculateStats(scores);
+                        return `
+                            <tr>
+                                <td>${stage}</td>
+                                <td>${formatStats(stats)}</td>
+                                <td>${data.corrected.final_score?.toFixed(2) || '-'}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </table>
+            `;
+            showModal();
+        }
+
+        function showJurorDetails(juror) {
+            const modalBody = document.getElementById('modal-body');
+            const participants = getCurrentCompetitionData().participants;
+
+            const stageOrder = ['stage1', 'stage2', 'stage3', 'final'];
+            const currentIndex = stageOrder.indexOf(currentStage);
+            const stagesToShow = stageOrder.slice(0, currentIndex + 1);
+
+            const stageStats = {};
+            stagesToShow.forEach(stage => {
+                const scoresInStage = participants
+                    .filter(p => p.stages[stage])
+                    .map(p => p.stages[stage].corrected.juror_scores[juror])
+                    .filter(s => typeof s === 'number');
+
+                if (scoresInStage.length > 0) {
+                    stageStats[stage] = calculateStats(scoresInStage);
+                }
+            });
+
+            const studentsInCurrentStage = participants.filter(p =>
+                p.stages[currentStage] && p.stages[currentStage].corrected.juror_scores[juror] === 's'
+            );
+
+            modalBody.innerHTML = `
+                <h2>${juror}</h2>
+                <h3>Statistics by Stage</h3>
+                <table>
+                    <tr><th>Stage</th><th>Avg ± SD</th></tr>
+                    ${Object.entries(stageStats).map(([stage, stats]) => `
+                        <tr>
+                            <td>${stage}</td>
+                            <td>${formatStats(stats)}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+                ${studentsInCurrentStage.length > 0 ? `
+                    <h3>Students (in ${currentStage})</h3>
+                    <ul>
+                        ${studentsInCurrentStage.map(p => `<li>${p.first_name} ${p.last_name}</li>`).join('')}
+                    </ul>
+                ` : ''}
+            `;
+            showModal();
+        }
+
+        function formatScore(score) {
+            if (score === 's') return 's';
+            if (typeof score === 'number') return score.toFixed(2);
+            return '-';
+        }
+
+        function showModal() {
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function hideModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        function handleCompetitionChange(e) {
+            currentComp = e.target.value;
+            const [competition, year, stage] = e.target.value.split('-');
+            currentYear = year;
+            currentStage = stage;
+            updateURL();
+            renderHeatmap();
+
+            // If timeline tab is active, reinitialize it with new competition data
+            const timelineTab = document.getElementById('timeline');
+            if (timelineTab && timelineTab.classList.contains('active')) {
+                // Stop animation if playing
+                if (timelineState.isPlaying) {
+                    timelineState.isPlaying = false;
+                    if (timelineState.playButton) {
+                        timelineState.playButton.textContent = 'Play';
+                    }
+                    if (timelineState.animationFrame) {
+                        cancelAnimationFrame(timelineState.animationFrame);
+                    }
+                }
+                initializeTimeline();
+            }
+        }
+
+        function handleParticipantSortChange(e) {
+            participantSort = e.target.value;
+            updateURL();
+            renderHeatmap();
+        }
+
+        function handleJurorSortChange(e) {
+            jurorSort = e.target.value;
+            updateURL();
+            renderHeatmap();
+        }
+
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab and mark button as active
+            document.getElementById(tabName).classList.add('active');
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+            // Show/hide sort controls based on active tab
+            const showSortControls = (tabName === 'heatmap');
+            document.getElementById('participant-sort-group').style.display = showSortControls ? 'block' : 'none';
+            document.getElementById('juror-sort-group').style.display = showSortControls ? 'block' : 'none';
+
+            // Show/hide timeline legend - only show in timeline mode
+            const showTimelineLegend = (tabName === 'timeline');
+            document.getElementById('timeline-legend').style.display = showTimelineLegend ? 'inline' : 'none';
+
+            // Update URL to remember selected tab
+            const params = new URLSearchParams(window.location.search);
+            params.set('tab', tabName);
+            // Remove sort params when timeline tab is active
+            if (tabName === 'timeline') {
+                params.delete('psort');
+                params.delete('jsort');
+            }
+            window.history.replaceState({}, '', `?${params.toString()}`);
+
+            // Initialize timeline if switching to timeline tab
+            if (tabName === 'timeline') {
+                initializeTimeline();
+            }
+        }
+
+                        // Timeline state
+        let timelineState = {
+            performances: [],
+            currentTime: 0,
+            isPlaying: false,
+            minTime: 0,
+            maxTime: 0,
+            playButton: null,
+            slider: null,
+            animationFrame: null,
+            startPlayTime: 0,
+            lastAnimationTime: null
+        };
+
+        function prepareTimelineData() {
+            const yearData = getCurrentCompetitionData();
+            if (!yearData) return [];
+
+            const performances = [];
+            const uniqueDates = new Set();
+
+            // First pass: collect all unique dates for this stage
+            for (const participant of yearData.participants) {
+                if (participant.stages[currentStage] && participant.stages[currentStage].time_start) {
+                    const stageData = participant.stages[currentStage];
+                    uniqueDates.add(stageData.date);
+                }
+            }
+
+            // Create date-to-day-offset map with sorted dates
+            const dateToDayOffset = {};
+            Array.from(uniqueDates).sort().forEach((date, index) => {
+                dateToDayOffset[date] = index;
+            });
+
+            // Second pass: create performance objects with correct timeline positions
+            for (const participant of yearData.participants) {
+                if (participant.stages[currentStage] && participant.stages[currentStage].time_start) {
+                    const stageData = participant.stages[currentStage];
+                    const date = stageData.date;
+
+                    const [h, m] = stageData.time_start.split(':').map(Number);
+                    const timeOfDayMinutes = h * 60 + m;
+                    // Convert to absolute minutes: day offset * 1440 minutes/day + time within day
+                    const startMinutes = dateToDayOffset[date] * 1440 + timeOfDayMinutes;
+
+                    const [eh, em] = stageData.time_stop.split(':').map(Number);
+                    const endTimeOfDayMinutes = eh * 60 + em;
+                    const endMinutes = dateToDayOffset[date] * 1440 + endTimeOfDayMinutes;
+
+                    const scores = Object.values(stageData.corrected.juror_scores)
+                        .filter(s => typeof s === 'number');
+                    const avgRating = scores.length > 0 ? scores.reduce((a, b) => a + b) / scores.length : 0;
+
+                    const mean = avgRating;
+                    const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / scores.length;
+                    const sd = Math.sqrt(variance);
+
+                    performances.push({
+                        nr: participant.nr,
+                        name: `${participant.first_name} ${participant.last_name}`,
+                        date: date,
+                        startMinutes: startMinutes,
+                        endMinutes: endMinutes,
+                        avgRating: avgRating,
+                        sd: sd,
+                        age: participant.age,
+                        jurorScores: stageData.corrected.juror_scores
+                    });
+                }
+            }
+            performances.sort((a, b) => a.startMinutes - b.startMinutes);
+
+            return performances;
+        }
+
+
+        function getTop3FinishedPerformers(performances, currentTime) {
+            // Get top 3 performers who have finished their performance by currentTime
+            const finished = performances.filter(p => p.endMinutes <= currentTime);
+            const sorted = finished.sort((a, b) => b.avgRating - a.avgRating);
+            return sorted.slice(0, 3).map(p => ({ name: p.name, rating: p.avgRating }));
+        }
+
+        function updateTop3References() {
+            const { margin, chartHeight, chartWidth, svgHeight, top3Container, performances, currentTime, getRatingY } = timelineState;
+            const height = svgHeight;
+
+            // Clear previous top 3 marks
+            while (top3Container.firstChild) {
+                top3Container.removeChild(top3Container.firstChild);
+            }
+
+            // Get top 3 finished performers
+            const top3 = getTop3FinishedPerformers(performances, currentTime);
+
+            // Position labels at fixed ratings to avoid overlap with more spacing
+            const fixedRatings = [25, 22, 19];
+
+            // Add reference marks for each top performer on the Y-axis
+            for (let i = 0; i < top3.length; i++) {
+                const { name, rating } = top3[i];
+                const actualY = getRatingY(rating);
+                const labelRating = fixedRatings[i];
+                const labelY = getRatingY(labelRating);
+                const labelX = margin.left * 0.4;
+
+                // Add horizontal reference line across the whole stage at actual rating
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', margin.left);
+                line.setAttribute('y1', actualY);
+                line.setAttribute('x2', margin.left + chartWidth);
+                line.setAttribute('y2', actualY);
+                line.setAttribute('stroke', '#999');
+                line.setAttribute('stroke-width', Math.max(1, 2 * timelineState.fontScale));
+                line.setAttribute('stroke-dasharray', '6,4');
+                line.setAttribute('opacity', '0.8');
+                top3Container.appendChild(line);
+
+                // Add label text with full name centered
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', labelX);
+                label.setAttribute('y', labelY);
+                label.setAttribute('text-anchor', 'middle');
+                label.setAttribute('font-size', '2.0em');
+                label.setAttribute('fill', '#333');
+                label.setAttribute('font-weight', 'bold');
+
+                // Split full name: first name on first line, last name on second line, rating on third line
+                const nameParts = name.split(' ');
+                const firstName = nameParts[0];
+                const lastName = nameParts[nameParts.length - 1];
+
+                const tspan1 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                tspan1.setAttribute('x', labelX);
+                tspan1.setAttribute('dy', '0');
+                tspan1.textContent = firstName;
+                label.appendChild(tspan1);
+
+                const tspan2 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                tspan2.setAttribute('x', labelX);
+                tspan2.setAttribute('dy', '1.2em');
+                tspan2.textContent = lastName;
+                label.appendChild(tspan2);
+
+                const tspan3 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                tspan3.setAttribute('x', labelX);
+                tspan3.setAttribute('dy', '1.2em');
+                tspan3.textContent = rating.toFixed(2);
+                label.appendChild(tspan3);
+
+                top3Container.appendChild(label);
+
+                // Arrow endpoints with proportional spacing based on available horizontal distance
+                const availableHorizontalDistance = margin.left - labelX;
+                const arrowStartOffsetPx = availableHorizontalDistance * 0.45;
+                const arrowEndOffsetPx = availableHorizontalDistance * 0.45;
+
+                const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                arrow.setAttribute('x1', labelX + arrowStartOffsetPx);
+                arrow.setAttribute('y1', labelY);
+                arrow.setAttribute('x2', margin.left - arrowEndOffsetPx);
+                arrow.setAttribute('y2', actualY);
+                arrow.setAttribute('stroke', '#333');
+                arrow.setAttribute('stroke-width', Math.max(1, 2 * timelineState.fontScale));
+                arrow.setAttribute('opacity', '0.9');
+                top3Container.appendChild(arrow);
+            }
+        }
+
+        function initializeTimeline() {
+            const container = document.getElementById('timeline-canvas');
+            if (!container) return;
+
+            container.innerHTML = '';
+            timelineState.performances = prepareTimelineData();
+
+            if (timelineState.performances.length === 0) {
+                container.innerHTML = '<p>No performances with schedule data available for this stage.</p>';
+                return;
+            }
+
+            // Check if all performances have age data
+            timelineState.useAgeForSize = timelineState.performances.every(p => p.age !== undefined && p.age !== null);
+
+            // Calculate time range (start leftPaddingMinutes before first performer, end rightPaddingMinutes after last)
+            const leftPaddingMinutes = 60;
+            const rightPaddingMinutes = 240;  // four hours for last performer label to be visible
+            const actualMinTime = Math.min(...timelineState.performances.map(p => p.startMinutes));
+            const actualMaxTime = Math.max(...timelineState.performances.map(p => p.endMinutes));
+            timelineState.minTime = Math.max(0, actualMinTime - leftPaddingMinutes);
+            timelineState.maxTime = actualMaxTime + rightPaddingMinutes;
+            timelineState.currentTime = actualMinTime;
+            // Night hours to exclude: 23:00 to 08:00
+            timelineState.nightStart = 23 * 60;  // 23:00
+            timelineState.nightEnd = 8 * 60;     // 08:00
+
+            // SVG dimensions using CSS custom properties for responsive scaling
+            const rootStyles = getComputedStyle(document.documentElement);
+            const rootFontSize = parseFloat(rootStyles.fontSize);
+            timelineState.rootFontSize = rootFontSize;
+
+            // Calculate responsive dimensions based on container size
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            // SVG width is based on time span (like heatmap width based on columns)
+            // Scale factor comes from CSS custom property, converts to px using rootFontSize
+            const timeSpanMinutes = timelineState.maxTime - timelineState.minTime;
+            const emPerMinuteStr = rootStyles.getPropertyValue('--timeline-em-per-minute').trim();
+            const emPerMinute = parseFloat(emPerMinuteStr);
+            const timeBasedWidthPx = timeSpanMinutes * emPerMinute * rootFontSize;
+            // In portrait: allow overflow for label spacing; in landscape: fit all days within container
+            const isPortrait = containerHeight > containerWidth;
+            let width;
+            if (isPortrait) {
+                width = Math.max(400, timeBasedWidthPx);
+            } else {
+                width = Math.max(400, Math.min(containerWidth, timeBasedWidthPx));
+            }
+            const height = Math.max(280, containerHeight);
+
+            // Font scale factor based on viewport height for mobile landscape
+            const fontScale = Math.max(0.6, Math.min(1, height / 600));
+
+            // Helper to convert em to px
+            const parseMarginValue = (value) => {
+                const trimmed = value.trim();
+                if (trimmed.endsWith('em')) {
+                    return parseFloat(trimmed) * rootFontSize;
+                }
+                return parseInt(trimmed);
+            };
+
+            // Store font scale in timelineState for use in other functions
+            timelineState.fontScale = fontScale;
+
+            const margin = {
+                top: parseMarginValue(rootStyles.getPropertyValue('--timeline-margin-top')),
+                right: parseMarginValue(rootStyles.getPropertyValue('--timeline-margin-right')),
+                bottom: parseMarginValue(rootStyles.getPropertyValue('--timeline-margin-bottom')),
+                left: parseMarginValue(rootStyles.getPropertyValue('--timeline-margin-left'))
+            };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            // Create SVG
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', width);
+            svg.setAttribute('height', height);
+            svg.style.border = '1px solid #ccc';
+
+
+            // Y-axis (rating scale 0-25)
+            const yAxisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            yAxisLine.setAttribute('x1', margin.left);
+            yAxisLine.setAttribute('y1', margin.top);
+            yAxisLine.setAttribute('x2', margin.left);
+            yAxisLine.setAttribute('y2', height - margin.bottom);
+            yAxisLine.setAttribute('stroke', '#333');
+            yAxisLine.setAttribute('stroke-width', '2');
+            svg.appendChild(yAxisLine);
+
+            // X-axis (time)
+            const xAxisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            xAxisLine.setAttribute('x1', margin.left);
+            xAxisLine.setAttribute('y1', height - margin.bottom);
+            xAxisLine.setAttribute('x2', width - margin.right);
+            xAxisLine.setAttribute('y2', height - margin.bottom);
+            xAxisLine.setAttribute('stroke', '#333');
+            xAxisLine.setAttribute('stroke-width', '2');
+            svg.appendChild(xAxisLine);
+
+            // Helper function to map rating values to Y positions (with cut-away from 3-8)
+            const getRatingY = (rating) => {
+                // Ratings 0-2 and 9-25 are visible; 3-8 are cut away
+                // Total visible: 20 ratings (3 + 17)
+                let visibleIndex;
+                if (rating >= 0 && rating <= 2) {
+                    visibleIndex = rating;
+                } else if (rating >= 9 && rating <= 25) {
+                    visibleIndex = 3 + (rating - 9);
+                } else {
+                    return null;  // In the cut-away region
+                }
+                return margin.top + (chartHeight * (20 - visibleIndex) / 20);
+            };
+
+            // Y-axis labels: 0, 5, 10 every 5 units below 15, then 15-25 every 1 unit
+            const ratingLabels = [];
+            for (let i = 0; i <= 10; i += 5) ratingLabels.push(i);  // 0, 5, 10
+            for (let i = 15; i <= 25; i += 1) ratingLabels.push(i);  // Unit ticks from 15 up
+
+            for (const i of ratingLabels) {
+                const y = getRatingY(i);
+                if (y === null) continue;
+
+                const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                tick.setAttribute('x1', margin.left - 5);
+                tick.setAttribute('y1', y);
+                tick.setAttribute('x2', margin.left);
+                tick.setAttribute('y2', y);
+                tick.setAttribute('stroke', '#333');
+                svg.appendChild(tick);
+
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', margin.left - 15);
+                label.setAttribute('y', y + 4);
+                label.setAttribute('text-anchor', 'end');
+                label.setAttribute('font-size', '2.0em');
+                label.textContent = i;
+                svg.appendChild(label);
+            }
+
+            // Add break indicator "≈" on the y-axis between rating 2 and 9
+            const breakY = (getRatingY(2) + getRatingY(9)) / 2;
+            const breakLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            breakLabel.setAttribute('x', margin.left);
+            breakLabel.setAttribute('y', breakY + 4);
+            breakLabel.setAttribute('text-anchor', 'middle');
+            breakLabel.setAttribute('font-size', '2.0em');
+            breakLabel.setAttribute('fill', '#999');
+            breakLabel.textContent = '≈';
+            svg.appendChild(breakLabel);
+
+            // Build a map from day offset to date for X-axis labels
+            const dayOffsetToDate = {};
+            const dayOffsetToHourRange = {};  // Track actual hour ranges for each day
+            for (const perf of timelineState.performances) {
+                const dayOffset = Math.floor(perf.startMinutes / 1440);
+                if (!dayOffsetToDate[dayOffset]) {
+                    dayOffsetToDate[dayOffset] = perf.date;
+                }
+                // Track first and last hour of performances on this day
+                const minutesInDay = perf.startMinutes % 1440;
+                const hour = Math.floor(minutesInDay / 60);
+                if (!dayOffsetToHourRange[dayOffset]) {
+                    dayOffsetToHourRange[dayOffset] = { first: hour, last: hour };
+                } else {
+                    dayOffsetToHourRange[dayOffset].first = Math.min(dayOffsetToHourRange[dayOffset].first, hour);
+                    dayOffsetToHourRange[dayOffset].last = Math.max(dayOffsetToHourRange[dayOffset].last, hour);
+                }
+            }
+
+            // Add ticks and time labels every 2 hours, alternating above/below
+            for (let dayOffset = Math.floor(timelineState.minTime / 1440); dayOffset <= Math.floor(timelineState.maxTime / 1440); dayOffset++) {
+                // Determine hour range for this day (use actual range or 10-23 as fallback)
+                const hourRange = dayOffsetToHourRange[dayOffset];
+                let startHour, endHour;
+                if (hourRange) {
+                    startHour = Math.floor(hourRange.first / 2) * 2;  // Round down to nearest even hour
+                    endHour = Math.ceil(hourRange.last / 2) * 2;      // Round up to nearest even hour
+                } else {
+                    startHour = 10;
+                    endHour = 23;
+                }
+
+                for (let hour = startHour; hour <= endHour; hour += 2) {
+                    const timeMinutes = dayOffset * 1440 + hour * 60;
+
+                    if (timeMinutes >= timelineState.minTime && timeMinutes <= timelineState.maxTime) {
+                        const xPos = margin.left + ((timeMinutes - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime)) * chartWidth;
+
+                        // Short tick below x-axis
+                        const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        tick.setAttribute('x1', xPos);
+                        tick.setAttribute('y1', height - margin.bottom);
+                        tick.setAttribute('x2', xPos);
+                        tick.setAttribute('y2', height - margin.bottom + 5);
+                        tick.setAttribute('stroke', '#333');
+                        tick.setAttribute('stroke-width', '1');
+                        svg.appendChild(tick);
+
+                        // Time label - alternate above/below (first hour below, then above, etc)
+                        const timeStr = `${hour.toString().padStart(2, '0')}`;
+                        const isAbove = ((hour - startHour) / 2) % 2 === 1;  // Alternate based on position in hour range
+                        const labelY = isAbove ? height - margin.bottom - 15 : height - margin.bottom + 25;
+
+                        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        label.setAttribute('x', xPos);
+                        label.setAttribute('y', labelY);
+                        label.setAttribute('text-anchor', 'middle');
+                        label.setAttribute('font-size', '2.0em');
+                        label.setAttribute('fill', '#333');
+                        label.textContent = timeStr;
+                        svg.appendChild(label);
+                    }
+                }
+            }
+
+            // Add visual break indicators for night hours (23:00 to 08:00)
+            for (let dayOffset = Math.floor(timelineState.minTime / 1440); dayOffset <= Math.floor(timelineState.maxTime / 1440); dayOffset++) {
+                const nightStartMinutes = dayOffset * 1440 + timelineState.nightStart;
+                const nextDayNightEndMinutes = (dayOffset + 1) * 1440 + timelineState.nightEnd;
+
+                if (nightStartMinutes < timelineState.maxTime && nextDayNightEndMinutes > timelineState.minTime) {
+                    const xBreakStart = margin.left + ((nightStartMinutes - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime)) * chartWidth;
+                    const xBreakEnd = margin.left + ((nextDayNightEndMinutes - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime)) * chartWidth;
+
+                    // Semi-transparent background for night hours
+                    const breakBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    breakBg.setAttribute('x', xBreakStart);
+                    breakBg.setAttribute('y', margin.top);
+                    breakBg.setAttribute('width', xBreakEnd - xBreakStart);
+                    breakBg.setAttribute('height', chartHeight);
+                    breakBg.setAttribute('fill', '#f0f0f0');
+                    breakBg.setAttribute('opacity', '0.5');
+                    svg.appendChild(breakBg);
+
+                    // "NIGHT" label - at same vertical level as YYYY-MM-DD date labels
+                    const breakMidX = (xBreakStart + xBreakEnd) / 2;
+                    const breakLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    breakLabel.setAttribute('x', breakMidX);
+                    breakLabel.setAttribute('y', height - margin.bottom - 35);
+                    breakLabel.setAttribute('text-anchor', 'middle');
+                    breakLabel.setAttribute('font-size', '2.5em');
+                    breakLabel.setAttribute('fill', '#666');
+                    breakLabel.setAttribute('font-weight', 'bold');
+                    breakLabel.setAttribute('font-style', 'italic');
+                    breakLabel.textContent = '-- NIGHT --';
+                    svg.appendChild(breakLabel);
+                }
+            }
+
+            // Add YYYY-MM-DD date labels just above x-axis inside plot area
+            for (const [dayOffset, date] of Object.entries(dayOffsetToDate)) {
+                // Use actual hour range for this day
+                const hourRange = dayOffsetToHourRange[dayOffset];
+                let dayStartHour = 10, dayEndHour = 22;
+                if (hourRange) {
+                    dayStartHour = hourRange.first;
+                    dayEndHour = hourRange.last;
+                }
+                const dayStartMinutes = parseInt(dayOffset) * 1440 + dayStartHour * 60;
+                const dayEndMinutes = parseInt(dayOffset) * 1440 + dayEndHour * 60;
+                const dayCenter = (dayStartMinutes + dayEndMinutes) / 2;
+
+                if (dayCenter >= timelineState.minTime && dayCenter <= timelineState.maxTime) {
+                    const xPos = margin.left + ((dayCenter - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime)) * chartWidth;
+                    const yPos = height - margin.bottom - 35;  // Further up, above hour labels
+
+                    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    label.setAttribute('x', xPos);
+                    label.setAttribute('y', yPos);
+                    label.setAttribute('text-anchor', 'middle');
+                    label.setAttribute('font-size', '2.5em');
+                    label.setAttribute('fill', '#333');
+                    label.setAttribute('font-weight', 'bold');
+
+                    // Format date as YYYY-MM-DD
+                    const dateObj = new Date(date);
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    label.textContent = `${year}-${month}-${day}`;
+
+                    svg.appendChild(label);
+                }
+            }
+
+            // Store SVG dimensions in timelineState for use in updateDots
+            timelineState.svgWidth = width;
+            timelineState.svgHeight = height;
+            timelineState.margin = margin;
+            timelineState.chartWidth = chartWidth;
+            timelineState.chartHeight = chartHeight;
+            timelineState.svg = svg;
+            timelineState.dayOffsetToHourRange = dayOffsetToHourRange;
+
+            // Store the rating Y-position mapping function
+            timelineState.getRatingY = getRatingY;
+
+            // Render all performance dots based on current time
+            function updateDots() {
+                // Update slider tick position during animation
+                // Use chart-based calculation for consistency with SVG coordinates
+                const normalizedValue = (timelineState.currentTime - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime);
+                const tickChartX = timelineState.margin.left + normalizedValue * timelineState.chartWidth;
+                timelineState.sliderTickLine.setAttribute('x1', tickChartX);
+                timelineState.sliderTickLine.setAttribute('x2', tickChartX);
+
+                // Remove old dots and current performer label
+                const oldDots = svg.querySelectorAll('circle[data-perf]');
+                oldDots.forEach(d => d.remove());
+                const oldLabel = svg.querySelector('text[data-current-perf]');
+                if (oldLabel) oldLabel.remove();
+                const oldFinishedLabel = svg.querySelector('text[data-last-finished-label]');
+                if (oldFinishedLabel) oldFinishedLabel.remove();
+
+                // Clean up any lingering tooltips from old circles
+                const oldTooltips = document.querySelectorAll('div[data-perf-tooltip]');
+                oldTooltips.forEach(t => t.remove());
+
+                const { margin, chartWidth, chartHeight, svgHeight } = timelineState;
+                const height = svgHeight;
+
+                let currentlyPlaying = null;
+
+                // Remove old error bars
+                const oldErrorBars = svg.querySelectorAll('line[data-error-bar]');
+                oldErrorBars.forEach(bar => bar.remove());
+
+                const oldJurorDots = svg.querySelectorAll('[data-juror-dot]');
+                oldJurorDots.forEach(dot => dot.remove());
+
+                for (let i = 0; i < timelineState.performances.length; i++) {
+                    const perf = timelineState.performances[i];
+
+                    // Only show dot if performance has started
+                    if (timelineState.currentTime < perf.startMinutes) {
+                        continue;
+                    }
+
+                    // Track which performance is currently happening (not yet finished)
+                    if (timelineState.currentTime < perf.endMinutes) {
+                        currentlyPlaying = perf;
+                    }
+
+                    const xPos = margin.left + ((perf.startMinutes - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime)) * chartWidth;
+
+                    // Calculate Y position: animate from rating 1 to avgRating during performance
+                    let yPos;
+                    if (timelineState.currentTime >= perf.endMinutes) {
+                        // Performance complete, show at final rating
+                        yPos = timelineState.getRatingY(perf.avgRating);
+                    } else {
+                        // Currently playing, animate proportionally from rating 1 to final rating
+                        const progress = (timelineState.currentTime - perf.startMinutes) / (perf.endMinutes - perf.startMinutes);
+                        const startY = timelineState.getRatingY(1);
+                        const topY = timelineState.getRatingY(perf.avgRating);
+                        yPos = startY + (topY - startY) * progress;
+                    }
+
+                    // Calculate circle size based on age (if available) or use fixed size
+                    let size;
+                    if (timelineState.useAgeForSize && perf.age !== undefined) {
+                        // Scale circle size by age using fixed scale 10-30 years
+                        // Map age 10-30 to size range 2.5-9.5 * fontScale
+                        const ageNormalized = Math.max(10, Math.min(30, perf.age));
+                        size = (2.5 + (ageNormalized - 10) * 0.35) * timelineState.fontScale;
+                    } else {
+                        // Fixed size for all circles
+                        size = 5 * timelineState.fontScale;
+                    }
+
+                    // Determine dot color: start at rating 10, animate to final rating
+                    let dotColor;
+                    if (timelineState.currentTime >= perf.endMinutes) {
+                        // Performance finished: use final rating color
+                        dotColor = getScoreColor(perf.avgRating);
+                    } else if (timelineState.currentTime < perf.startMinutes) {
+                        // Not started: shouldn't happen due to continue above, but use rating 10
+                        dotColor = getScoreColor(10);
+                    } else {
+                        // Currently playing: interpolate between rating 10 and final rating
+                        const progress = (timelineState.currentTime - perf.startMinutes) / (perf.endMinutes - perf.startMinutes);
+                        const interpolatedRating = 10 + (perf.avgRating - 10) * progress;
+                        dotColor = getScoreColor(interpolatedRating);
+                    }
+
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('cx', xPos);
+                    circle.setAttribute('cy', yPos);
+                    circle.setAttribute('r', size);
+                    circle.setAttribute('fill', dotColor);
+                    circle.setAttribute('stroke', '#333');
+                    circle.setAttribute('stroke-width', Math.max(0.5, timelineState.fontScale));
+                    circle.setAttribute('data-perf', i);
+
+                    // Add error bars (±sd) only for finished performances
+                    if (timelineState.currentTime >= perf.endMinutes) {
+                        let topRating = perf.avgRating + perf.sd;
+                        let bottomRating = perf.avgRating - perf.sd;
+
+                        // Clamp to visible range (0-25)
+                        topRating = Math.min(25, topRating);
+                        bottomRating = Math.max(0, bottomRating);
+
+                        const errorTopY = timelineState.getRatingY(topRating);
+                        const errorBottomY = timelineState.getRatingY(bottomRating);
+
+                        if (errorTopY !== null && errorBottomY !== null) {
+                            const errorLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            errorLine.setAttribute('x1', xPos);
+                            errorLine.setAttribute('y1', errorTopY);
+                            errorLine.setAttribute('x2', xPos);
+                            errorLine.setAttribute('y2', errorBottomY);
+                            errorLine.setAttribute('stroke', '#999');
+                            errorLine.setAttribute('stroke-width', Math.max(1, 2.5 * timelineState.fontScale));
+                            errorLine.setAttribute('opacity', '0.7');
+                            errorLine.setAttribute('data-error-bar', 'true');
+                            svg.appendChild(errorLine);
+                        }
+                    }
+
+                    circle.addEventListener('mouseover', () => {
+                        const tooltip = document.createElement('div');
+                        tooltip.setAttribute('data-perf-tooltip', 'true');
+                        tooltip.style.position = 'fixed';
+                        tooltip.style.background = '#333';
+                        tooltip.style.color = '#fff';
+                        tooltip.style.padding = '1em';
+                        tooltip.style.borderRadius = '4px';
+                        tooltip.style.fontSize = '1.5em';
+                        tooltip.style.zIndex = '1000';
+                        tooltip.style.pointerEvents = 'none';
+                        const ageText = perf.age !== undefined ? ` (age ${perf.age})` : '';
+                        tooltip.textContent = `${perf.name}${ageText}: ${perf.avgRating.toFixed(2)} (±${perf.sd.toFixed(2)})`;
+                        document.body.appendChild(tooltip);
+
+                        const rect = circle.getBoundingClientRect();
+                        tooltip.style.left = (rect.left) + 'px';
+                        tooltip.style.top = (rect.top - 40) + 'px';
+
+                        circle.tooltip = tooltip;
+                    });
+
+                    circle.addEventListener('mouseout', () => {
+                        if (circle.tooltip) {
+                            circle.tooltip.remove();
+                            delete circle.tooltip;
+                        }
+                    });
+
+                    circle.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                    });
+
+                    svg.appendChild(circle);
+                }
+
+                // After loop: if we've passed the last performer, create a dummy player
+                // to trigger the label display without showing "Playing: " text
+                if (!currentlyPlaying && timelineState.performances.length > 0) {
+                    const lastPerf = timelineState.performances[timelineState.performances.length - 1];
+                    if (timelineState.currentTime >= lastPerf.endMinutes) {
+                        currentlyPlaying = { isDummy: true };
+                    }
+                }
+
+                // Find last finished performance
+                let lastFinished = null;
+                let lastFinishedIndex = -1;
+                for (let i = timelineState.performances.length - 1; i >= 0; i--) {
+                    if (timelineState.currentTime >= timelineState.performances[i].endMinutes) {
+                        lastFinished = timelineState.performances[i];
+                        lastFinishedIndex = i;
+                        break;
+                    }
+                }
+
+                // Helper function to add performer label (used for last finished and last currently playing)
+                const addPerformerLabel = (performer, xPos, yPos) => {
+                    const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+                    const labelStartY = yPos - rootFontSize * 1.2;
+
+                    // Calculate circle size to position label after it
+                    let circleSize;
+                    if (timelineState.useAgeForSize && performer.age !== undefined) {
+                        const ageNormalized = Math.max(10, Math.min(30, performer.age));
+                        circleSize = (2.5 + (ageNormalized - 10) * 0.35) * timelineState.fontScale;
+                    } else {
+                        circleSize = 5 * timelineState.fontScale;
+                    }
+                    // Position center of label after circle edge plus spacing for text width
+                    const labelXPos = xPos + 3 * circleSize + (25 * timelineState.fontScale);
+
+                    const ratingLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    ratingLabel.setAttribute('x', labelXPos);
+                    ratingLabel.setAttribute('y', labelStartY);
+                    ratingLabel.setAttribute('text-anchor', 'middle');
+                    ratingLabel.setAttribute('font-size', '2.0em');
+                    ratingLabel.setAttribute('fill', '#333');
+                    ratingLabel.setAttribute('data-last-finished-label', 'true');
+
+                    // Split name into first and last name
+                    const nameParts = performer.name.split(' ');
+                    const firstName = nameParts[0];
+                    const lastName = nameParts.slice(1).join(' ');
+
+                    // Create tspan elements: first name, last name, age (if available), rating
+                    const tspan1 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                    tspan1.setAttribute('x', labelXPos);
+                    tspan1.setAttribute('dy', '0');
+                    tspan1.textContent = firstName;
+
+                    const tspan2 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                    tspan2.setAttribute('x', labelXPos);
+                    tspan2.setAttribute('dy', '1.2em');
+                    tspan2.textContent = lastName;
+
+                    ratingLabel.appendChild(tspan1);
+                    ratingLabel.appendChild(tspan2);
+
+                    // Add age if available
+                    if (performer.age !== undefined) {
+                        const tspanAge = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                        tspanAge.setAttribute('x', labelXPos);
+                        tspanAge.setAttribute('dy', '1.2em');
+                        tspanAge.textContent = `(age ${performer.age})`;
+                        ratingLabel.appendChild(tspanAge);
+                    }
+
+                    const tspan3 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                    tspan3.setAttribute('x', labelXPos);
+                    tspan3.setAttribute('dy', '1.2em');
+                    tspan3.textContent = performer.avgRating.toFixed(2);
+
+                    ratingLabel.appendChild(tspan3);
+                    svg.appendChild(ratingLabel);
+                };
+
+                if (lastFinished && lastFinished.jurorScores) {
+                    const xPos = margin.left + ((lastFinished.startMinutes - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime)) * chartWidth;
+
+                    // Find the two most extreme outlier scores
+                    const lowerBound = lastFinished.avgRating - lastFinished.sd;
+                    const upperBound = lastFinished.avgRating + lastFinished.sd;
+
+                    const outliers = [];
+                    for (const [jurorName, jurorScore] of Object.entries(lastFinished.jurorScores)) {
+                        if (typeof jurorScore === 'number') {
+                            if (jurorScore < lowerBound || jurorScore > upperBound) {
+                                outliers.push({ jurorName, jurorScore });
+                            }
+                        }
+                    }
+
+                    // Sort by score and pick most extreme on each side
+                    outliers.sort((a, b) => a.jurorScore - b.jurorScore);
+                    const extremeOutliers = [];
+                    if (outliers.length > 0) {
+                        extremeOutliers.push(outliers[0]); // Lowest score
+                        if (outliers.length > 1) {
+                            extremeOutliers.push(outliers[outliers.length - 1]); // Highest score
+                        }
+                    }
+
+                    for (const { jurorName, jurorScore } of extremeOutliers) {
+                        const jurorYPos = timelineState.getRatingY(jurorScore);
+                        if (jurorYPos !== null) {
+                            const largestPlayerRadius = 9.5 * timelineState.fontScale;
+                            const jurorRadius = (2/3) * largestPlayerRadius;
+
+                            // Create invisible filled circle for hover detection (same size as outline circle)
+                            const jurorCircleHover = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                            jurorCircleHover.setAttribute('cx', xPos);
+                            jurorCircleHover.setAttribute('cy', jurorYPos);
+                            jurorCircleHover.setAttribute('r', jurorRadius);
+                            jurorCircleHover.setAttribute('fill', 'transparent');
+                            jurorCircleHover.setAttribute('stroke', 'none');
+                            jurorCircleHover.setAttribute('data-juror-dot', 'true');
+
+                            // Create visible outline circle
+                            const jurorCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                            jurorCircle.setAttribute('cx', xPos);
+                            jurorCircle.setAttribute('cy', jurorYPos);
+                            jurorCircle.setAttribute('r', jurorRadius);
+                            jurorCircle.setAttribute('fill', 'none');
+                            jurorCircle.setAttribute('stroke', '#000');
+                            jurorCircle.setAttribute('stroke-width', Math.max(0.5, timelineState.fontScale));
+                            jurorCircle.setAttribute('data-juror-dot', 'true');
+
+                            // Add juror initials to the right of the circle
+                            const jurorInitials = jurorName.split(' ').map(part => part[0]).join('');
+                            const jurorLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            jurorLabel.setAttribute('x', xPos + jurorRadius + 4 * timelineState.fontScale);
+                            jurorLabel.setAttribute('y', jurorYPos);
+                            jurorLabel.setAttribute('dominant-baseline', 'middle');
+                            jurorLabel.setAttribute('font-size', '1.5em');
+                            jurorLabel.setAttribute('fill', '#000');
+                            jurorLabel.setAttribute('data-juror-dot', 'true');
+                            jurorLabel.textContent = jurorInitials;
+
+                            jurorCircleHover.addEventListener('mouseover', () => {
+                                const jurorTooltip = document.createElement('div');
+                                jurorTooltip.setAttribute('data-perf-tooltip', 'true');
+                                jurorTooltip.style.position = 'fixed';
+                                jurorTooltip.style.background = '#333';
+                                jurorTooltip.style.color = '#fff';
+                                jurorTooltip.style.padding = '1em';
+                                jurorTooltip.style.borderRadius = '0.5em';
+                                jurorTooltip.style.fontSize = '1.5em';
+                                jurorTooltip.style.zIndex = '1000';
+                                jurorTooltip.style.pointerEvents = 'none';
+                                jurorTooltip.textContent = `${lastFinished.name} - ${jurorName}: ${jurorScore.toFixed(2)}`;
+                                document.body.appendChild(jurorTooltip);
+
+                                const rect = jurorCircleHover.getBoundingClientRect();
+                                const tooltipOffsetEm = 5;
+                                const tooltipOffsetPx = tooltipOffsetEm * timelineState.rootFontSize;
+                                jurorTooltip.style.left = rect.left + 'px';
+                                jurorTooltip.style.top = (rect.top - tooltipOffsetPx) + 'px';
+
+                                jurorCircleHover.tooltip = jurorTooltip;
+                            });
+
+                            jurorCircleHover.addEventListener('mouseout', () => {
+                                if (jurorCircleHover.tooltip) {
+                                    jurorCircleHover.tooltip.remove();
+                                    delete jurorCircleHover.tooltip;
+                                }
+                            });
+
+                            jurorCircleHover.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                            });
+
+                            svg.appendChild(jurorCircleHover);
+                            svg.appendChild(jurorCircle);
+                            svg.appendChild(jurorLabel);
+                        }
+                    }
+                }
+
+                // Add text label to the right of last finished performer (if one is playing or if dummy player for last)
+                if (lastFinished && currentlyPlaying) {
+                    const lastFinishedXPos = margin.left + ((lastFinished.startMinutes - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime)) * chartWidth;
+                    const lastFinishedYPos = timelineState.getRatingY(lastFinished.avgRating);
+                    addPerformerLabel(lastFinished, lastFinishedXPos, lastFinishedYPos);
+                }
+
+                // Add text label for currently playing performer (above the chart)
+                // Skip if this is a dummy player (used only to show the label of the last finished performer)
+                if (currentlyPlaying && !currentlyPlaying.isDummy) {
+                    // Format time HH:MM (start time only)
+                    const startH = Math.floor(currentlyPlaying.startMinutes / 60) % 24;
+                    const startM = currentlyPlaying.startMinutes % 60;
+                    const timeStr = `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}`;
+
+                    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    label.setAttribute('x', margin.left + 10);
+                    label.setAttribute('y', margin.top - 5);
+                    label.setAttribute('font-size', '2.5em');
+                    label.setAttribute('font-weight', 'bold');
+                    label.setAttribute('fill', '#333');
+                    label.setAttribute('data-current-perf', 'true');
+                    const ageText = currentlyPlaying.age !== undefined ? ` (age ${currentlyPlaying.age})` : '';
+                    label.textContent = `Playing: ${currentlyPlaying.name}${ageText} ${currentlyPlaying.date} ${timeStr}`;
+                    svg.appendChild(label);
+                }
+
+                // Update top 3 reference marks
+                updateTop3References();
+            }
+
+            // Create top 3 performers container AFTER all chart elements so it renders on top
+            timelineState.top3Container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            svg.appendChild(timelineState.top3Container);
+
+            timelineState.updateDots = updateDots;
+            container.appendChild(svg);
+
+            // Temporarily store buttonContainer reference (will be set after buttons are created)
+            let buttonContainerRef = null;
+
+            svg.addEventListener('click', (e) => {
+                // Only toggle playback if clicked directly on SVG, not on buttons
+                if (e.target === svg && !buttonContainerRef?.contains(e.target)) {
+                    const activeTooltips = document.querySelectorAll('div[data-perf-tooltip]');
+                    if (activeTooltips.length > 0) {
+                        activeTooltips.forEach(tooltip => tooltip.remove());
+                    } else {
+                        togglePlayback();
+                    }
+                }
+            });
+
+            setTimeout(() => {
+                const svgRect = svg.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                timelineState.svgLeftOffset = svgRect.x - containerRect.x;
+                timelineState.containerRect = containerRect;
+            }, 50);
+
+            addPlaybackControls(container, svg);
+            updateDots();
+        }
+
+        function addPlaybackControls(container, svg) {
+            // Time label container - positioned slightly above x-axis so tick marks are visible
+            const sliderDiv = document.createElement('div');
+            sliderDiv.style.position = 'absolute';
+            sliderDiv.style.top = (timelineState.svgHeight - timelineState.margin.bottom - 10) + 'px';
+            sliderDiv.style.zIndex = '10';
+            sliderDiv.style.left = '0px';
+            sliderDiv.style.width = '100%';
+
+            const timeLabel = document.createElement('div');
+            timeLabel.style.position = 'absolute';
+            timeLabel.style.fontSize = '2.0em';
+            timeLabel.style.fontWeight = 'bold';
+            timeLabel.style.textAlign = 'center';
+            timeLabel.style.boxSizing = 'border-box';
+            timeLabel.style.display = 'flex';
+            timeLabel.style.flexDirection = 'column';
+            timeLabel.style.justifyContent = 'center';
+            timeLabel.style.alignItems = 'center';
+            timeLabel.style.lineHeight = '1.2';
+            timeLabel.style.width = timelineState.margin.left + 'px';
+            timeLabel.style.height = '100%';
+            // Position will be set after button container is created to align with button center
+
+            // Slider input container - positioned to align with x-axis, accounting for thumb width
+            const rootStyles = getComputedStyle(document.documentElement);
+            const thumbSizeStr = rootStyles.getPropertyValue('--slider-thumb-size').trim();
+            const thumbSizeEm = parseFloat(thumbSizeStr);
+            const bodyComputedStyle = window.getComputedStyle(document.body);
+            const actualFontSize = parseFloat(bodyComputedStyle.fontSize);
+            const thumbWidthPx = Math.ceil(thumbSizeEm * actualFontSize) + 4;
+            const thumbWidthEm = thumbWidthPx / actualFontSize;
+            timelineState.thumbWidthPx = thumbWidthPx;
+
+
+            // Calculate SVG offset immediately to align slider with x-axis
+            const svgRect = svg.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+            const svgOffsetFromContainer = svgRect.x - containerRect.x;
+
+            const sliderControlContainer = document.createElement('div');
+            sliderControlContainer.style.position = 'absolute';
+            sliderControlContainer.style.top = (timelineState.svgHeight - timelineState.margin.bottom - 10) + 'px';
+            sliderControlContainer.style.zIndex = '10';
+            sliderControlContainer.style.left = (svgOffsetFromContainer + timelineState.margin.left - thumbWidthPx / 2) + 'px';
+            sliderControlContainer.style.width = (timelineState.chartWidth + thumbWidthPx) + 'px';
+            sliderControlContainer.style.margin = '0';
+            sliderControlContainer.style.padding = '0';
+
+            const firstDayOffset = Math.floor(timelineState.minTime / 1440);
+            const firstDayHourRange = timelineState.dayOffsetToHourRange[firstDayOffset];
+            const firstHour = firstDayHourRange ? firstDayHourRange.first : 10;
+            const firstDayFirstHour = firstDayOffset * 1440 + firstHour * 60;
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = timelineState.minTime;
+            slider.max = timelineState.maxTime;
+            slider.value = timelineState.currentTime;
+
+            slider.style.width = '100%';
+
+            // Create tooltip for slider
+            const sliderTooltip = document.createElement('div');
+            sliderTooltip.className = 'slider-tooltip';
+            sliderControlContainer.appendChild(sliderTooltip);
+
+            // Helper to format time for tooltip (same logic as updateTimeLabel)
+            const getTimeStringForSlider = (timeValue) => {
+                const dayOffset = Math.floor(timeValue / 1440);
+                const minutesInDay = timeValue % 1440;
+                const h = Math.floor(minutesInDay / 60);
+                const m = Math.floor(minutesInDay % 60);
+                const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+                // Find the date for this day offset
+                let currentDate = null;
+                for (const perf of timelineState.performances) {
+                    if (Math.floor(perf.startMinutes / 1440) === dayOffset) {
+                        currentDate = perf.date;
+                        break;
+                    }
+                }
+
+                if (currentDate) {
+                    const dateObj = new Date(currentDate);
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${day}`;
+                    return `${dateStr}<br>${timeStr}`;
+                } else {
+                    return timeStr;
+                }
+            };
+
+            slider.addEventListener('mousemove', (e) => {
+                const rect = slider.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                sliderTooltip.style.left = x + 'px';
+                sliderTooltip.innerHTML = getTimeStringForSlider(parseInt(slider.value));
+            });
+
+            slider.addEventListener('mouseover', () => {
+                sliderTooltip.classList.add('visible');
+            });
+
+            slider.addEventListener('mouseout', () => {
+                sliderTooltip.classList.remove('visible');
+            });
+
+            // Create SVG tick element that follows the slider thumb
+            const sliderTickLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            sliderTickLine.setAttribute('stroke', '#333');
+            sliderTickLine.setAttribute('stroke-width', '1');
+            sliderTickLine.setAttribute('y1', timelineState.svgHeight - timelineState.margin.bottom);
+            sliderTickLine.setAttribute('y2', timelineState.svgHeight - timelineState.margin.bottom + timelineState.rootFontSize * 0.5);
+            svg.appendChild(sliderTickLine);
+            timelineState.sliderTickLine = sliderTickLine;
+            slider.addEventListener('input', (e) => {
+                timelineState.currentTime = parseInt(e.target.value);
+
+                // Update tick position to follow slider thumb
+                // Use chart-based calculation for consistency with SVG coordinates
+                const normalizedValue = (parseInt(e.target.value) - parseInt(slider.min)) / (parseInt(slider.max) - parseInt(slider.min));
+                const tickChartX = timelineState.margin.left + normalizedValue * timelineState.chartWidth;
+                timelineState.sliderTickLine.setAttribute('x1', tickChartX);
+                timelineState.sliderTickLine.setAttribute('x2', tickChartX);
+
+                timelineState.isPlaying = false;
+                timelineState.playButton.textContent = 'Play';
+                timelineState.updateDots();
+                timelineState.updateTimeLabel();
+            });
+
+            const updateTimeLabel = () => {
+                const dayOffset = Math.floor(timelineState.currentTime / 1440);
+                const minutesInDay = timelineState.currentTime % 1440;
+                const h = Math.floor(minutesInDay / 60);
+                const m = Math.floor(minutesInDay % 60);
+                const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+                // Find the date for this day offset
+                let currentDate = null;
+                for (const perf of timelineState.performances) {
+                    if (Math.floor(perf.startMinutes / 1440) === dayOffset) {
+                        currentDate = perf.date;
+                        break;
+                    }
+                }
+
+                timeLabel.innerHTML = '';
+                if (currentDate) {
+                    const dateObj = new Date(currentDate);
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${day}`;
+
+                    const dateLine = document.createElement('div');
+                    dateLine.textContent = dateStr;
+                    timeLabel.appendChild(dateLine);
+
+                    const timeLine = document.createElement('div');
+                    timeLine.textContent = timeStr;
+                    timeLabel.appendChild(timeLine);
+                } else {
+                    const timeLine = document.createElement('div');
+                    timeLine.textContent = timeStr;
+                    timeLabel.appendChild(timeLine);
+                }
+            };
+            updateTimeLabel();
+            timelineState.updateTimeLabel = updateTimeLabel;
+            timelineState.slider = slider;
+
+            sliderDiv.appendChild(timeLabel);
+            sliderControlContainer.appendChild(slider);
+            container.appendChild(sliderDiv);
+            container.appendChild(sliderControlContainer);
+
+            // Initialize tick position
+            const initialNormalized = (timelineState.currentTime - timelineState.minTime) / (timelineState.maxTime - timelineState.minTime);
+            const initialTickX = timelineState.margin.left + initialNormalized * timelineState.chartWidth;
+            timelineState.sliderTickLine.setAttribute('x1', initialTickX);
+            timelineState.sliderTickLine.setAttribute('x2', initialTickX);
+
+            // Play/Pause and Reset buttons - positioned to the left of y-axis
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.position = 'absolute';
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.flexDirection = 'column';
+            buttonContainer.style.gap = '4.0em';
+            buttonContainer.style.zIndex = '10';
+            buttonContainer.style.fontSize = '1em';
+
+            // Responsive button sizing
+            const isMobile = timelineState.fontScale < 0.8;
+            const btnFontSize = isMobile ? '2.5em' : '2.0em';
+            const btnWidth = isMobile ? '5em' : '5em';
+            const btnPadding = isMobile ? '0.2em 0.2em' : '0.2em 0.2em';
+
+            const prevButton = document.createElement('button');
+            prevButton.textContent = 'Previous';
+            prevButton.style.cssText = `padding: ${btnPadding}; cursor: pointer; width: ${btnWidth}; font-size: ${btnFontSize}; text-align: center;`;
+            prevButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                jumpToPreviousPerformer();
+            });
+
+            const playButton = document.createElement('button');
+            playButton.textContent = 'Play';
+            playButton.style.cssText = `padding: ${btnPadding}; cursor: pointer; width: ${btnWidth}; font-size: ${btnFontSize}; text-align: center;`;
+            playButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                togglePlayback();
+            });
+
+            const nextButton = document.createElement('button');
+            nextButton.textContent = 'Next';
+            nextButton.style.cssText = `padding: ${btnPadding}; cursor: pointer; width: ${btnWidth}; font-size: ${btnFontSize}; text-align: center;`;
+            nextButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                jumpToNextPerformer();
+            });
+
+            buttonContainer.appendChild(prevButton);
+            buttonContainer.appendChild(playButton);
+            buttonContainer.appendChild(nextButton);
+
+            // Position the timeline-canvas as relative so buttons can be positioned absolutely inside
+            container.style.position = 'relative';
+            container.appendChild(buttonContainer);
+
+            // Store reference so SVG click handler can exclude button clicks
+            buttonContainerRef = buttonContainer;
+
+            const buttonCenterX = timelineState.margin.left * 0.4;
+            buttonContainer.style.left = buttonCenterX + 'px';
+            buttonContainer.style.transform = 'translateX(-50%)';
+
+            const sliderCounterX = timelineState.margin.left * 0.4;
+            const timeLabelWidth = timelineState.margin.left;
+            timeLabel.style.left = (sliderCounterX - timeLabelWidth / 2) + 'px';
+
+            // Position button container: top of buttons should align with y-axis value 10
+            const y10Position = timelineState.margin.top + (timelineState.chartHeight * (20 - 10) / 20);  // getRatingY equivalent for 10
+            buttonContainer.style.top = y10Position + 'px';
+
+            timelineState.playButton = playButton;
+
+            // Auto-start playback on page load
+            timelineState.isPlaying = true;
+            timelineState.playButton.textContent = 'Pause';
+            timelineState.lastAnimationTime = Date.now();
+            animateTimeline();
+        }
+
+        function jumpToPreviousPerformer() {
+            // Find the previous performance that hasn't finished yet
+            const unfinishedPerfs = timelineState.performances.filter(p => p.startMinutes < timelineState.currentTime);
+            if (unfinishedPerfs.length > 0) {
+                // Get the last unfinished performance (the one most recently started before current time)
+                const prevPerf = unfinishedPerfs[unfinishedPerfs.length - 1];
+                timelineState.currentTime = prevPerf.startMinutes;
+                timelineState.isPlaying = false;
+                timelineState.playButton.textContent = 'Play';
+                timelineState.slider.value = timelineState.currentTime;
+                timelineState.updateDots();
+                timelineState.updateTimeLabel();
+            }
+        }
+
+        function jumpToNextPerformer() {
+            // Find the next performance that hasn't started yet
+            const unplayedPerfs = timelineState.performances.filter(p => p.startMinutes > timelineState.currentTime);
+            if (unplayedPerfs.length > 0) {
+                // Get the first unplayed performance
+                const nextPerf = unplayedPerfs[0];
+                timelineState.currentTime = nextPerf.startMinutes;
+                timelineState.isPlaying = false;
+                timelineState.playButton.textContent = 'Play';
+                timelineState.slider.value = timelineState.currentTime;
+                timelineState.updateDots();
+                timelineState.updateTimeLabel();
+            } else {
+                // No more performances: jump to the end of the last performer to show their label
+                const lastPerf = timelineState.performances[timelineState.performances.length - 1];
+                if (lastPerf && timelineState.currentTime < lastPerf.endMinutes) {
+                    timelineState.currentTime = lastPerf.endMinutes;
+                    timelineState.isPlaying = false;
+                    timelineState.playButton.textContent = 'Play';
+                    timelineState.slider.value = timelineState.currentTime;
+                    timelineState.updateDots();
+                    timelineState.updateTimeLabel();
+                }
+            }
+        }
+
+        function togglePlayback() {
+            timelineState.isPlaying = !timelineState.isPlaying;
+            timelineState.playButton.textContent = timelineState.isPlaying ? 'Pause' : 'Play';
+
+            if (timelineState.isPlaying) {
+                timelineState.lastAnimationTime = Date.now();
+                animateTimeline();
+            }
+        }
+
+        function resetTimeline() {
+            timelineState.currentTime = timelineState.minTime;
+            timelineState.isPlaying = false;
+            timelineState.playButton.textContent = 'Play';
+            timelineState.lastAnimationTime = null;
+            timelineState.slider.value = timelineState.currentTime;
+            timelineState.updateTimeLabel();
+            timelineState.updateDots();
+            if (timelineState.animationFrame) {
+                cancelAnimationFrame(timelineState.animationFrame);
+            }
+        }
+
+        function animateTimeline() {
+        try {
+            if (!timelineState.isPlaying) return;
+
+            const now = Date.now();
+            const deltaMs = now - timelineState.lastAnimationTime;
+            const deltaSecs = deltaMs / 1000;
+
+            // Check speed based on CURRENT time
+            const currentMinutesInDay = timelineState.currentTime % 1440;
+            let playbackSpeed = 45;  // Normal: 45x speed (0.75 minutes per second)
+            if (currentMinutesInDay >= timelineState.nightStart || currentMinutesInDay < timelineState.nightEnd) {
+                // Night hours: 450x speed (7.5 minutes per second)
+                playbackSpeed = 450;
+            }
+
+            timelineState.currentTime += deltaSecs * playbackSpeed;
+            timelineState.lastAnimationTime = now;
+
+            if (timelineState.currentTime >= timelineState.maxTime) {
+                timelineState.currentTime = timelineState.maxTime;
+                timelineState.isPlaying = false;
+                timelineState.playButton.textContent = 'Play';
+            }
+
+            timelineState.slider.value = timelineState.currentTime;
+            timelineState.updateTimeLabel();
+            timelineState.updateDots();
+
+            if (timelineState.isPlaying) {
+                timelineState.animationFrame = requestAnimationFrame(animateTimeline);
+            }
+        } catch (err) {
+            console.error('Timeline animation error:', err);
+            timelineState.isPlaying = false;
+            timelineState.playButton.textContent = 'Play';
+        }
+        }
+
+        document.getElementById('competition-select').addEventListener('change', handleCompetitionChange);
+        document.getElementById('participant-sort').addEventListener('change', handleParticipantSortChange);
+        document.getElementById('juror-sort').addEventListener('change', handleJurorSortChange);
+
+        document.getElementById('close-modal').addEventListener('click', hideModal);
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') hideModal();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') hideModal();
+            if (e.key === ' ') {
+                e.preventDefault();
+                const timelineTab = document.getElementById('timeline');
+                if (timelineTab && timelineTab.classList.contains('active')) {
+                    const activeTooltips = document.querySelectorAll('div[data-perf-tooltip]');
+                    if (activeTooltips.length > 0) {
+                        activeTooltips.forEach(tooltip => tooltip.remove());
+                    } else {
+                        togglePlayback();
+                    }
+                }
+            }
+        });
+
+        // Tab button click handlers
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                switchTab(e.target.dataset.tab);
+            });
+        });
+
+        // Handle orientation changes - use resize event which is more reliable on mobile
+        function handleOrientationChange() {
+            // Guard: orientation/resize events can fire before async data fetch completes.
+            // Without this check, renderHeatmap() or initializeTimeline() would call
+            // getCurrentCompetitionData() which returns undefined, causing "Cannot read properties
+            // of undefined (reading 'participants')" error. This is a race condition between
+            // the resize event listener (registered immediately) and the async fetch completion.
+            if (Object.keys(competitionsData).length === 0) {
+                return;
+            }
+            const timelineTab = document.getElementById('timeline');
+            const heatmapTab = document.getElementById('heatmap');
+            if (timelineTab && timelineTab.classList.contains('active')) {
+                initializeTimeline();
+            }
+            if (heatmapTab && heatmapTab.classList.contains('active')) {
+                renderHeatmap();
+            }
+        }
+
+        window.addEventListener('orientationchange', handleOrientationChange);
+        window.addEventListener('resize', handleOrientationChange);
+    </script>
+</body>
+</html>

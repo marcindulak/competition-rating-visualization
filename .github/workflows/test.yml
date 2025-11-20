@@ -1,0 +1,39 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  # Run on first day of month at 3 AM UTC
+  schedule:
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v5
+
+      - name: astral.sh/uv/install.sh
+        run: |
+          set -eo pipefail
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: uv sync
+        run: |
+          set -eo pipefail
+          uv sync
+
+      - name: data/chopin_2025.json
+        run: |
+          set -eo pipefail
+          bash scripts/test_chopin_2025.sh
+
+      - name: uv run --frozen python -m mypy preprocessing
+        run: |
+          set -eo pipefail
+          uv run --frozen python -m mypy preprocessing

@@ -1,0 +1,10 @@
+*~
+.DS_Store
+*.json
+*.log
+*.py[c,d,o]
+*.claude.backup*
+node_modules
+old
+.venv
+venv
